@@ -1,0 +1,15 @@
+# venv folders
+.venv/
+venv/
+
+# Python cache files
+__pycache__/
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# IDE specific files
+.vscode/
+.idea/
