@@ -19,4 +19,4 @@ FACE_DETECTION_MIN_SIZE_H: int = 60
 # Validation settings
 MAX_OUTPUT_SIZE_KB: int = 100
 MAX_OUTPUT_SIZE_BYTES: int = MAX_OUTPUT_SIZE_KB * 1024
-SUPPORTED_FORMATS: tuple[str, ...] = ("JPEG", "JPG")
+SUPPORTED_FORMATS: tuple = ("JPEG", "JPG", "PNG", "WEBP", "MPO")

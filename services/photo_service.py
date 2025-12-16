@@ -42,6 +42,8 @@ def process_user_photo(image_bytes: bytes) -> bytes:
         # --- 1. Open and validate ---
         image: ImageObject = Image.open(io.BytesIO(image_bytes))
 
+        print(f"DEBUG: Pillow увидел формат: '{image.format}'")
+
         if image.format not in SUPPORTED_FORMATS:
             raise InvalidImageFormatError()
 

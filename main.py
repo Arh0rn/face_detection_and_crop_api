@@ -11,7 +11,6 @@ app = FastAPI(
     version=API_VERSION,
 )
 
-# Подключаем наш роутер
 app.include_router(photo_router, prefix="/api", tags=["Photo Processing"])
 
 
