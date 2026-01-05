@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 
 from api.handlers import router as photo_router
-from config import API_DESCRIPTION, API_TITLE, API_VERSION
+from config import API_VERSION
 
 app = FastAPI(
     version=API_VERSION,

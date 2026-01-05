@@ -1,7 +1,7 @@
 # config.py
 
 # API values
-API_VERSION: str = "1.2.0"
+API_VERSION: str = "1.2.1"
 
 
 # Image processing settings
