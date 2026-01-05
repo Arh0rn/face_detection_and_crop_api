@@ -1,9 +1,7 @@
 # config.py
 
-# API settings
-API_TITLE: str = "Photo Processing API"
-API_DESCRIPTION: str = "API for processing and optimizing user photos."
-API_VERSION: str = "1.1.0"
+# API values
+API_VERSION: str = "1.2.0"
 
 
 # Image processing settings

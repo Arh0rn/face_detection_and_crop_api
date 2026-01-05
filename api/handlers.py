@@ -3,14 +3,22 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
+
+from config import API_VERSION
 from core.exceptions import PhotoProcessingError
 from services.photo_service import process_user_photo
 
 router = APIRouter()
 
 
+@router.get("/health", tags=["System"])
+def health_check():
+    return {"status": "ok", "version": API_VERSION}
+
+
 @router.post(
     "/process",
+    tags=["Photo processing"],
     responses={
         200: {
             "content": {"image/jpeg": {}},
