@@ -3,6 +3,5 @@ uvicorn[standard]
 pydantic
 requests
 opencv-python
-numpy
 Pillow
 python-multipart 

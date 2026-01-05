@@ -1,17 +1,11 @@
-# services/photo_service.py
-
 import io
-
+import os
 import cv2
 import numpy as np
 from PIL import Image
 from PIL.Image import Image as ImageObject
 
 from config import (
-    FACE_DETECTION_MIN_NEIGHBORS,
-    FACE_DETECTION_MIN_SIZE_H,
-    FACE_DETECTION_MIN_SIZE_W,
-    FACE_DETECTION_SCALE_FACTOR,
     JPG_QUALITY,
     MAX_OUTPUT_SIZE_BYTES,
     PORTRAIT_PADDING_FACTOR,
@@ -28,80 +22,110 @@ from core.exceptions import (
 
 TARGET_ASPECT_RATIO: float = TARGET_WIDTH / TARGET_HEIGHT
 
+# Path to the YuNet model
+# We use a path relative to the project root
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_DIR, "models", "face_detection_yunet_2023mar.onnx")
 
-face_cascade: cv2.CascadeClassifier = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"  # type: ignore
+if not os.path.exists(MODEL_PATH):
+    raise RuntimeError(f"Face detection model not found at {MODEL_PATH}")
+
+# Initialize YuNet Face Detector
+# We set input_size dynamically, but need an initial size
+face_detector = cv2.FaceDetectorYN.create(
+    model=MODEL_PATH,
+    config="",
+    input_size=(320, 320),
+    score_threshold=0.5,
+    nms_threshold=0.3,
+    top_k=5000,
+    backend_id=cv2.dnn.DNN_BACKEND_OPENCV,
+    target_id=cv2.dnn.DNN_TARGET_CPU,
 )
-
 
 def process_user_photo(image_bytes: bytes) -> bytes:
     """
-    Full pipeline for processing a user's photo with smart face-aware cropping.
+    Full pipeline for processing a user's photo with smart face-aware cropping using OpenCV YuNet.
     """
     try:
         # --- 1. Open and validate ---
         image: ImageObject = Image.open(io.BytesIO(image_bytes))
 
-        print(f"DEBUG: Pillow увидел формат: '{image.format}'")
-
         if image.format not in SUPPORTED_FORMATS:
             raise InvalidImageFormatError()
 
+        # Handle EXIF rotation automatically
+        from PIL import ImageOps
+        image = ImageOps.exif_transpose(image)
+        
         image = image.convert("RGB")
-        original_width: int
-        original_height: int
         original_width, original_height = image.size
 
-        # --- 2. Face detection ---
+        # --- 2. Face detection with YuNet ---
         open_cv_image = np.array(image)
-        gray = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2GRAY)
-        faces = face_cascade.detectMultiScale(
-            gray,
-            FACE_DETECTION_SCALE_FACTOR,
-            minNeighbors=FACE_DETECTION_MIN_NEIGHBORS,
-            minSize=(FACE_DETECTION_MIN_SIZE_W, FACE_DETECTION_MIN_SIZE_H),
-        )
+        # Convert RGB to BGR for OpenCV
+        open_cv_image_bgr = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
+        
+        # Update detector input size to match image size
+        face_detector.setInputSize((original_width, original_height))
+        
+        # Run detection
+        # retval is usually 1 if successful
+        retval, faces = face_detector.detect(open_cv_image_bgr)
 
-        if len(faces) == 0:
+        if faces is None or len(faces) == 0:
             raise NoFaceFoundError()
 
-        # --- NEW LOGIC: SMART CROPPING ---
-
-        # 3. Find the largest face if there are multiple
-        main_face = max(faces, key=lambda rect: rect[2] * rect[3])
-
-        fx: int
-        fy: int
-        fw: int
-        fh: int
-
-        fx, fy, fw, fh = main_face
-
-        # 4. Compute face center
+        # --- 3. Find the main face ---
+        # YuNet returns faces as a numpy array of shape [n_faces, 15]
+        # Columns: x1, y1, w, h, x_right_eye, y_right_eye, ... conf
+        # We select the face with the highest confidence (col 14) or largest area (w*h)
+        # Let's use largest area as main metric for "main face"
+        
+        main_face = max(faces, key=lambda f: f[2] * f[3])
+        
+        fx, fy, fw, fh = main_face[0:4]
+        
+        # --- 4. Compute face center ---
         face_center_x: float = fx + fw / 2
         face_center_y: float = fy + fh / 2
 
-        # 5. Determine crop box size
+        # --- 5. Determine crop box size ---
         # We want the crop height to be PORTRAIT_PADDING_FACTOR times the face height
         crop_height: float = fh * PORTRAIT_PADDING_FACTOR
         crop_width: float = crop_height * TARGET_ASPECT_RATIO
 
-        # 6. Compute crop box coordinates so the face is centered
+        # --- 6. Compute crop box coordinates ---
         crop_x1: int = int(face_center_x - crop_width / 2)
         crop_y1: int = int(face_center_y - crop_height / 2)
         crop_x2: int = int(face_center_x + crop_width / 2)
         crop_y2: int = int(face_center_y + crop_height / 2)
 
-        # 7. Adjust the box so it doesn't go outside the image
+        # --- 7. Adjust the box ---
+        # Shift approach to preserve aspect ratio
+        if crop_x1 < 0:
+            crop_x2 -= crop_x1
+            crop_x1 = 0
+        if crop_y1 < 0:
+            crop_y2 -= crop_y1
+            crop_y1 = 0
+        if crop_x2 > original_width:
+            crop_x1 -= (crop_x2 - original_width)
+            crop_x2 = original_width
+        if crop_y2 > original_height:
+            crop_y1 -= (crop_y2 - original_height)
+            crop_y2 = original_height
+
+        # Clamp
         crop_x1 = max(0, crop_x1)
         crop_y1 = max(0, crop_y1)
         crop_x2 = min(original_width, crop_x2)
         crop_y2 = min(original_height, crop_y2)
 
-        # 8. Crop the image
+        # --- 8. Crop the image ---
         cropped_image: ImageObject = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
 
-        # 9. Final resize to exact 700x800
+        # 9. Final resize to exact target size
         final_image: ImageObject = cropped_image.resize(
             (TARGET_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS
         )
@@ -122,7 +146,8 @@ def process_user_photo(image_bytes: bytes) -> bytes:
 
         raise CompressionError()
 
-    except FileNotFoundError:
-        raise RuntimeError("File 'haarcascade_frontalface_default.xml' not found")
     except Exception as e:
+        # Re-raise known errors, wrap unknown ones
+        if isinstance(e, (PhotoProcessingError, NoFaceFoundError, InvalidImageFormatError, CompressionError)):
+            raise e
         raise PhotoProcessingError(f"Failed to process image: {e}")
