@@ -13,3 +13,7 @@ __pycache__/
 # IDE specific files
 .vscode/
 .idea/
+
+# AI agent related
+.kiro/
+.agent/
