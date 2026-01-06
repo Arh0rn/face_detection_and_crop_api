@@ -21,6 +21,3 @@ app = FastAPI(
 
 
 app.include_router(photo_router, prefix="/api")
-
-
-

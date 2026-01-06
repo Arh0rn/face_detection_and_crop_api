@@ -43,6 +43,7 @@ face_detector = cv2.FaceDetectorYN.create(
     target_id=cv2.dnn.DNN_TARGET_CPU,
 )
 
+
 def process_user_photo(image_bytes: bytes) -> bytes:
     """
     Full pipeline for processing a user's photo with smart face-aware cropping using OpenCV YuNet.
@@ -56,8 +57,9 @@ def process_user_photo(image_bytes: bytes) -> bytes:
 
         # Handle EXIF rotation automatically
         from PIL import ImageOps
+
         image = ImageOps.exif_transpose(image)
-        
+
         image = image.convert("RGB")
         original_width, original_height = image.size
 
@@ -65,10 +67,10 @@ def process_user_photo(image_bytes: bytes) -> bytes:
         open_cv_image = np.array(image)
         # Convert RGB to BGR for OpenCV
         open_cv_image_bgr = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
-        
+
         # Update detector input size to match image size
         face_detector.setInputSize((original_width, original_height))
-        
+
         # Run detection
         # retval is usually 1 if successful
         retval, faces = face_detector.detect(open_cv_image_bgr)
@@ -81,11 +83,11 @@ def process_user_photo(image_bytes: bytes) -> bytes:
         # Columns: x1, y1, w, h, x_right_eye, y_right_eye, ... conf
         # We select the face with the highest confidence (col 14) or largest area (w*h)
         # Let's use largest area as main metric for "main face"
-        
+
         main_face = max(faces, key=lambda f: f[2] * f[3])
-        
+
         fx, fy, fw, fh = main_face[0:4]
-        
+
         # --- 4. Compute face center ---
         face_center_x: float = fx + fw / 2
         face_center_y: float = fy + fh / 2
@@ -110,10 +112,10 @@ def process_user_photo(image_bytes: bytes) -> bytes:
             crop_y2 -= crop_y1
             crop_y1 = 0
         if crop_x2 > original_width:
-            crop_x1 -= (crop_x2 - original_width)
+            crop_x1 -= crop_x2 - original_width
             crop_x2 = original_width
         if crop_y2 > original_height:
-            crop_y1 -= (crop_y2 - original_height)
+            crop_y1 -= crop_y2 - original_height
             crop_y2 = original_height
 
         # Clamp
@@ -148,6 +150,14 @@ def process_user_photo(image_bytes: bytes) -> bytes:
 
     except Exception as e:
         # Re-raise known errors, wrap unknown ones
-        if isinstance(e, (PhotoProcessingError, NoFaceFoundError, InvalidImageFormatError, CompressionError)):
+        if isinstance(
+            e,
+            (
+                PhotoProcessingError,
+                NoFaceFoundError,
+                InvalidImageFormatError,
+                CompressionError,
+            ),
+        ):
             raise e
         raise PhotoProcessingError(f"Failed to process image: {e}")
