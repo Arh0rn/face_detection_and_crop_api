@@ -84,7 +84,24 @@ def process_user_photo(image_bytes: bytes) -> bytes:
         # We select the face with the highest confidence (col 14) or largest area (w*h)
         # Let's use largest area as main metric for "main face"
 
-        main_face = max(faces, key=lambda f: f[2] * f[3])
+        # Custom heuristic for "Main Face":
+        # 1. Filter by confidence (>= 0.6) to reduce noise
+        # 2. Keep top 3 largest faces by area
+        # 3. Choose the highest one (smallest y) from the largest faces
+        # This prevents selecting a "torso face" or background face over the true face.
+
+        valid_faces = [f for f in faces if f[14] >= 0.6]
+        if not valid_faces:
+            valid_faces = faces
+
+        # Sort by area (width * height) descending
+        valid_faces = sorted(valid_faces, key=lambda f: f[2] * f[3], reverse=True)
+
+        # Take top 3 largest
+        top_candidates = valid_faces[:3]
+
+        # Select the one with smallest y (top-most)
+        main_face = min(top_candidates, key=lambda f: f[1])
 
         fx, fy, fw, fh = main_face[0:4]
 
